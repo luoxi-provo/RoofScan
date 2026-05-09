@@ -50,7 +50,8 @@ type EstimateResponse = {
 export default function HomePage() {
   const [address, setAddress] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
-  const [loading, setLoading] = useState(false);
+  const [loadingEstimate, setLoadingEstimate] = useState(false);
+  const [loadingAnalysis, setLoadingAnalysis] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<EstimateResponse | null>(null);
   const [analysis, setAnalysis] = useState<RoofAnalysis | null>(null);
@@ -67,7 +68,8 @@ export default function HomePage() {
       return;
     }
 
-    setLoading(true);
+    setLoadingEstimate(true);
+    setLoadingAnalysis(false);
     try {
       const res = await fetch("/api/roof-estimate", {
         method: "POST",
@@ -82,8 +84,10 @@ export default function HomePage() {
       }
 
       setResult(data);
+      setLoadingEstimate(false);
 
       if (data.roofAnalysisUrl) {
+        setLoadingAnalysis(true);
         try {
           const analysisRes = await fetch(data.roofAnalysisUrl, { cache: "no-store" });
           const analysisData = await analysisRes.json();
@@ -94,12 +98,14 @@ export default function HomePage() {
           }
         } catch {
           setAnalysisError("Network error while analyzing roof image.");
+        } finally {
+          setLoadingAnalysis(false);
         }
       }
     } catch {
       setError("Network error. Please try again.");
     } finally {
-      setLoading(false);
+      setLoadingEstimate(false);
     }
   }
 
@@ -155,7 +161,9 @@ export default function HomePage() {
           onChange={(e) => setAddress(e.target.value)}
           onKeyDown={handlePasteShortcut}
         />
-        <button type="submit" disabled={loading}>{loading ? "Estimating..." : "Estimate Roof"}</button>
+        <button type="submit" disabled={loadingEstimate || loadingAnalysis}>
+          {loadingEstimate ? "Estimating..." : loadingAnalysis ? "Waiting for further AI analysis..." : "Estimate Roof"}
+        </button>
         {error && <div className="error">{error}</div>}
       </form>
 
@@ -165,11 +173,11 @@ export default function HomePage() {
           <div className="grid">
             <div className="kv"><b>Address</b>{result.formattedAddress}</div>
             <div className="kv"><b>Coordinates</b>{result.latitude}, {result.longitude}</div>
-            <div className="kv"><b>Estimated Roof Size</b>{result.roofAreaSqFt.toLocaleString()} sq ft</div>
+            <div className="kv" style={{ background: "#fff7d6", borderRadius: 8, padding: "8px 10px" }}><b>Estimated Roof Size</b>{result.roofAreaSqFt.toLocaleString()} sq ft</div>
             <div className="kv"><b>Roof Area</b>{result.roofAreaMeters2} m²</div>
             <div className="kv"><b>Roofing Squares</b>{result.roofingSquares} squares</div>
-            <div className="kv"><b>Average Pitch</b>{result.averagePitchDegrees != null ? `${result.averagePitchDegrees}°` : "Unavailable"}</div>
-            <div className="kv"><b>Approximate Pitch</b>{result.pitchX12 ?? "Unavailable"}</div>
+            <div className="kv" style={{ background: "#fff7d6", borderRadius: 8, padding: "8px 10px" }}><b>Average Pitch</b>{result.averagePitchDegrees != null ? `${result.averagePitchDegrees}°` : "Unavailable"}</div>
+            <div className="kv" style={{ background: "#fff7d6", borderRadius: 8, padding: "8px 10px" }}><b>Approximate Pitch</b>{result.pitchX12 ?? "Unavailable"}</div>
             <div className="kv"><b>Solar API Imagery Date</b>{result.imageryDate ?? "Unavailable"}</div>
             <div className="kv"><b>Flat projected area</b>{result.flatAreaSqFt != null ? `${result.flatAreaSqFt.toLocaleString()} sq ft` : "Unavailable"}</div>
             <div className="kv"><b>Roof segments</b>{result.segments.length}</div>
@@ -184,6 +192,10 @@ export default function HomePage() {
                 style={{ width: "100%", maxWidth: 720, borderRadius: 10, border: "1px solid #e2e8f0" }}
               />
             </div>
+          )}
+
+          {loadingAnalysis && (
+            <p className="muted" style={{ marginTop: 10 }}>Google result is ready. Waiting for further AI analysis...</p>
           )}
 
           {!!result.segments.length && (
