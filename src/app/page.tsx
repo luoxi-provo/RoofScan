@@ -10,11 +10,32 @@ type Segment = {
   azimuthDegrees: number | null;
 };
 
+type RoofAnalysis = {
+  summary: string;
+  feetPerPixel: number;
+  roofOutlinePoints: Array<{ x: number; y: number }>;
+  ridgeLines: Array<{ from: { x: number; y: number }; to: { x: number; y: number } }>;
+  measurements: Array<{ item: string; pixels: number; feet: number }>;
+  overlaySvg: string;
+};
+
+const OPENAI_LINE_ITEMS = [
+  "ridge",
+  "hip",
+  "valley",
+  "rake",
+  "eave",
+  "gutter",
+  "flashing",
+  "step flashing",
+] as const;
+
 type EstimateResponse = {
   formattedAddress: string;
   latitude: number;
   longitude: number;
   staticMapImageUrl?: string;
+  roofAnalysisUrl?: string;
   roofAreaMeters2: number;
   roofAreaSqFt: number;
   roofingSquares: number;
@@ -32,10 +53,14 @@ export default function HomePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<EstimateResponse | null>(null);
+  const [analysis, setAnalysis] = useState<RoofAnalysis | null>(null);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
+    setAnalysis(null);
+    setAnalysisError(null);
     setResult(null);
     if (!address.trim()) {
       setError("Address is required.");
@@ -57,6 +82,20 @@ export default function HomePage() {
       }
 
       setResult(data);
+
+      if (data.roofAnalysisUrl) {
+        try {
+          const analysisRes = await fetch(data.roofAnalysisUrl, { cache: "no-store" });
+          const analysisData = await analysisRes.json();
+          if (!analysisRes.ok) {
+            setAnalysisError(analysisData.error || "Roof analysis failed.");
+          } else {
+            setAnalysis(analysisData);
+          }
+        } catch {
+          setAnalysisError("Network error while analyzing roof image.");
+        }
+      }
     } catch {
       setError("Network error. Please try again.");
     } finally {
@@ -91,6 +130,15 @@ export default function HomePage() {
       // If clipboard API is blocked, let user use context-menu paste.
     }
   }
+
+  const openAiMeasurements = OPENAI_LINE_ITEMS.map((name) => {
+    const found = analysis?.measurements.find((m) => m.item.toLowerCase().trim() === name);
+    return {
+      item: name,
+      pixels: found?.pixels ?? 0,
+      feet: found?.feet ?? 0,
+    };
+  });
 
   return (
     <main>
@@ -163,6 +211,59 @@ export default function HomePage() {
                 </tbody>
               </table>
             </div>
+          )}
+        </section>
+      )}
+
+      {(analysis || analysisError) && (
+        <section className="card" style={{ marginTop: 18 }}>
+          <h2 style={{ marginTop: 0 }}>OpenAI Roof Analysis</h2>
+
+          {analysisError && <div className="error">Roof analysis failed: {analysisError}</div>}
+
+          {analysis && (
+            <>
+              {result?.staticMapImageUrl && (
+                <div style={{ marginTop: 12 }}>
+                  <h3 style={{ marginBottom: 8 }}>Roof Overlay (OpenAI Vision)</h3>
+                  <div style={{ position: "relative", width: "100%", maxWidth: 720 }}>
+                    <img
+                      src={result.staticMapImageUrl}
+                      alt="Target house satellite view"
+                      style={{ width: "100%", borderRadius: 10, border: "1px solid #e2e8f0", display: "block" }}
+                    />
+                    <img
+                      src={`data:image/svg+xml;utf8,${encodeURIComponent(analysis.overlaySvg)}`}
+                      alt="Roof outline and ridge overlay"
+                      style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              <p className="muted" style={{ marginTop: 10 }}>{analysis.summary}</p>
+
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Item</th>
+                      <th>Pixels</th>
+                      <th>Feet</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {openAiMeasurements.map((m) => (
+                      <tr key={m.item}>
+                        <td>{m.item}</td>
+                        <td>{m.pixels}</td>
+                        <td>{m.feet}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </section>
       )}

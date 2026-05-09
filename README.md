@@ -11,6 +11,8 @@ Roof Size & Pitch Estimator web app based on Google Geocoding + Google Solar API
 - Roofing squares
 - Representative pitch (area-weighted) in degrees and x:12
 - Optional segment table
+- Google Static Map target-house image
+- ChatGPT vision roof analysis (outline + ridges + measurement line-items)
 - Server-side API key protection
 
 ## API
@@ -29,6 +31,10 @@ Prerequisites for your Google Cloud key:
 - Geocoding API enabled
 - Solar API enabled
 - Static Maps API enabled
+
+Additional AI analysis config:
+- `OPENAI_API_KEY`: API key for OpenAI Responses API
+- Optional: `OPENAI_ROOF_MODEL` (default `gpt-5`)
 
 1. Copy env file:
 
